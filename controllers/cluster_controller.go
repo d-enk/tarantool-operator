@@ -287,6 +287,15 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 			if err := topologyClient.Join(pod); err != nil {
 				if topology.IsAlreadyJoined(err) {
+
+					// call editReplicaset mutation to change left status for replica without state
+					replicasetUUID := sts.GetLabels()["tarantool.io/replicaset-uuid"]
+					err = topologyClient.SetReplicasetRoles(replicasetUUID, nil)
+					if err != nil {
+						reqLogger.Error(err, "can't call editReplicaset")
+						return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, err
+					}
+
 					tarantool.MarkJoined(pod)
 					if err := r.Update(context.TODO(), pod); err != nil {
 						return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, err

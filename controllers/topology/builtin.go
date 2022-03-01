@@ -361,7 +361,7 @@ func (s *BuiltInTopologyService) SetWeight(replicasetUUID string, replicaWeight 
 // SetReplicasetRoles set roles list of replicaset in the Tarantool service
 func (s *BuiltInTopologyService) SetReplicasetRoles(replicasetUUID string, roles []string) error {
 	reqLogger := log.WithValues("namespace", "topology.builtin")
-	reqLogger.Info("setting replicaset roles", "uuid", replicasetUUID, "weight", roles)
+	reqLogger.Info("setting replicaset roles", "uuid", replicasetUUID, "roles", roles)
 
 	req := graphql.NewRequest(setRsRolesMutation)
 	req.Var("uuid", replicasetUUID)
