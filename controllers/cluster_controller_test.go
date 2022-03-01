@@ -172,7 +172,7 @@ var _ = Describe("cluster_controller unit testing", func() {
 						}
 						return false
 					},
-					time.Second*10, time.Millisecond*500,
+					time.Second*100, time.Millisecond*500,
 				).Should(BeTrue())
 			})
 		})

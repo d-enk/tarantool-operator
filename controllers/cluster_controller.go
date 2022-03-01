@@ -224,6 +224,33 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
+	// check health of cluster leader
+	var topologyClient *topology.BuiltInTopologyService
+	currentLeaderIp := strings.Split(ep.Annotations["tarantool.io/leader"], ":")[0]
+	for i, addr := range append([]corev1.EndpointAddress{{IP: currentLeaderIp}}, ep.Subsets[0].Addresses...) { // current leader is first try
+		leader := fmt.Sprintf("%s:%s", addr.IP, "8081")
+		topologyClient = topology.NewBuiltInTopologyService(
+			topology.WithTopologyEndpoint(fmt.Sprintf("http://%s/admin/api", leader)),
+			topology.WithClusterID(cluster.GetName()),
+		)
+
+		if stat, err := topologyClient.GetServerStat(); err != nil {
+			reqLogger.Error(err, "can't get server stat")
+			if i == len(ep.Subsets[0].Addresses) { // is last candidate for leadership
+				reqLogger.Error(err, "can't get cluster leader")
+				return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, err
+			}
+		} else if len(stat.Stats) != 0 {
+			if ep.Annotations["tarantool.io/leader"] != leader {
+				ep.Annotations["tarantool.io/leader"] = leader
+				if err := r.Update(context.TODO(), ep); err != nil {
+					return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, err
+				}
+			}
+			break
+		}
+	}
+
 	stsList := &appsv1.StatefulSetList{}
 	if err := r.List(context.TODO(), stsList, &client.ListOptions{LabelSelector: clusterSelector, Namespace: req.NamespacedName.Namespace}); err != nil {
 		if errors.IsNotFound(err) {
@@ -232,11 +259,6 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 		return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, err
 	}
-
-	topologyClient := topology.NewBuiltInTopologyService(
-		topology.WithTopologyEndpoint(fmt.Sprintf("http://%s/admin/api", ep.Annotations["tarantool.io/leader"])),
-		topology.WithClusterID(cluster.GetName()),
-	)
 
 	for _, sts := range stsList.Items {
 		for i := 0; i < int(*sts.Spec.Replicas); i++ {
