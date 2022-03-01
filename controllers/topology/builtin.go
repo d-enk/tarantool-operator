@@ -126,6 +126,7 @@ var joinMutation = `mutation
 		$uri: String!,
 		$instance_uuid: String!,
 		$replicaset_uuid: String!,
+		$replicaset_alias: String,
 		$roles: [String!],
 		$vshard_group: String!
 	) {
@@ -133,6 +134,7 @@ var joinMutation = `mutation
 		uri: $uri,
 		instance_uuid: $instance_uuid,
 		replicaset_uuid: $replicaset_uuid,
+		replicaset_alias: $replicaset_alias,
 		roles: $roles,
 		timeout: 10,
 		vshard_group: $vshard_group
@@ -254,7 +256,13 @@ func (s *BuiltInTopologyService) Join(pod *corev1.Pod) error {
 		}
 	}
 
-	client := graphql.NewClient(s.serviceHost, graphql.WithHTTPClient(&http.Client{Timeout: time.Duration(time.Second * 5)}))
+	replicasetAlias := ""
+	for _, owner := range pod.OwnerReferences {
+		replicasetAlias = owner.Name
+		break
+	}
+
+	client := graphql.NewClient(s.serviceHost, graphql.WithHTTPClient(&http.Client{Timeout: time.Second * 5}))
 	req := graphql.NewRequest(joinMutation)
 
 	req.Var("uri", advURI)
@@ -262,6 +270,7 @@ func (s *BuiltInTopologyService) Join(pod *corev1.Pod) error {
 	req.Var("replicaset_uuid", replicasetUUID)
 	req.Var("roles", roles)
 	req.Var("vshard_group", vshardGroup)
+	req.Var("replicaset_alias", replicasetAlias)
 
 	resp := &JoinResponseData{}
 	if err := client.Run(context.TODO(), req, resp); err != nil {
