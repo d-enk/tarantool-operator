@@ -194,6 +194,8 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			if err := r.Create(context.TODO(), svc); err != nil {
 				return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, err
 			}
+		} else {
+			return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, err
 		}
 	}
 
