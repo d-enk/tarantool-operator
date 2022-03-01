@@ -197,6 +197,14 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 				sts.ObjectMeta.Annotations["tarantool.io/replicasetWeightWasSet"] = "0"
 			}
 		}
+
+		if failoverParams, ok := role.GetAnnotations()["tarantool.io/failoverParams"]; ok {
+			if sts.ObjectMeta.Annotations["tarantool.io/failoverParams"] != failoverParams {
+				sts.ObjectMeta.Annotations["tarantool.io/failoverParams"] = failoverParams
+				sts.ObjectMeta.Annotations["tarantool.io/failoverEnabled"] = "0"
+			}
+		}
+
 		sts.Spec.Template.Spec.Containers[0].Env = template.Spec.Template.Spec.Containers[0].Env
 		reqLogger.Info("Env variables", "vars", sts.Spec.Template.Spec.Containers[0].Env)
 		if err := r.Update(context.TODO(), &sts); err != nil {

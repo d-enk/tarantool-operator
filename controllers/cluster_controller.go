@@ -34,6 +34,7 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -452,11 +453,14 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			reqLogger.Info("cluster is already bootstrapped, not retrying", "Statefulset.Name", sts.GetName())
 		}
 
-		if stsAnnotations["tarantool.io/failoverEnabled"] == "1" {
-			reqLogger.Info("failover is enabled, not retrying")
-		} else {
-			if err := topologyClient.SetFailover(true); err != nil {
+		if stsAnnotations["tarantool.io/failoverEnabled"] == "0" {
+			var changeFailoverParams topology.ChangeFailoverParams
+			if err = yaml.Unmarshal([]byte(stsAnnotations["tarantool.io/failoverParams"]), &changeFailoverParams); err != nil {
+				reqLogger.Error(err, "failed to unmarshal cluster failover params")
+				return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, nil
+			} else if err := topologyClient.ChangeFailover(&changeFailoverParams); err != nil {
 				reqLogger.Error(err, "failed to enable cluster failover")
+				return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, err
 			} else {
 				reqLogger.Info("enabled failover")
 
@@ -464,6 +468,7 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				sts.SetAnnotations(stsAnnotations)
 				if err := r.Update(context.TODO(), &sts); err != nil {
 					reqLogger.Error(err, "failed to set failover enabled annotation")
+					return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, err
 				}
 			}
 		}

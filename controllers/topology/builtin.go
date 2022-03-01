@@ -53,9 +53,30 @@ type BootstrapVshardResponse struct {
 	Errors []*ResponseError     `json:"errors,omitempty"`
 }
 
-// FailoverData Structure of data for changing failover status
-type FailoverData struct {
+// ChangeFailoverParams failover config with all options
+type ChangeFailoverParams struct {
+	FailoverTimeout float64 `json:"failover_timeout" yaml:"failover_timeout"`
+	FencingEnabled  bool    `json:"fencing_enabled" yaml:"fencing_enabled"`
+	FencingTimeout  float64 `json:"fencing_timeout" yaml:"fencing_timeout"`
+	FencingPause    float64 `json:"fencing_pause" yaml:"fencing_pause"`
+	Mode            string  `json:"mode" yaml:"mode"`
+	StateProvider   string  `json:"state_provider" yaml:"state_provider"`
+	Etcd2Params     *struct {
+		Endpoints []string `json:"endpoints" yaml:"endpoints"`
+		LockDelay float64  `json:"lock_delay" yaml:"lock_delay"`
+		Prefix    string   `json:"prefix" yaml:"prefix"`
+
+		Username string `json:"username" yaml:"username"`
+		Password string `json:"password" yaml:"password"`
+	} `json:"etcd2_params" yaml:"etcd2_params"`
+	TarantoolParams *struct {
+		Uri      string `json:"uri" yaml:"uri"`
+		Password string `json:"password" yaml:"password"`
+	} `json:"tarantool_params" yaml:"tarantool_params"`
 }
+
+// FailoverData Structure of data for changing failover status
+type FailoverData struct{}
 
 // FailoverResponse type struct for returning on failovers
 type FailoverResponse struct {
@@ -120,6 +141,33 @@ var (
 	errAlreadyJoined       = errors.New("already joined")
 	errAlreadyBootstrapped = errors.New("already bootstrapped")
 )
+
+var changeFailover = `mutation
+	changeFailover(
+		$failover_timeout: Float,
+		$fencing_enabled: Boolean,
+		$fencing_timeout: Float,
+		$fencing_pause: Float,
+		$mode: String!,
+		$state_provider: String,
+		$etcd2_params: FailoverStateProviderCfgInputEtcd2,
+		$tarantool_params: FailoverStateProviderCfgInputTarantool
+	) {
+	cluster {
+	  	failover_params(
+			failover_timeout: $failover_timeout,
+			fencing_enabled: $fencing_enabled,
+			fencing_timeout: $fencing_timeout,
+			fencing_pause: $fencing_pause,
+			mode: $mode,
+			state_provider: $state_provider,
+			etcd2_params: $etcd2_params,
+			tarantool_params: $tarantool_params
+		) {
+			mode
+	  }
+	}
+}`
 
 var joinMutation = `mutation
 	do_join_server(
@@ -302,6 +350,35 @@ func (s *BuiltInTopologyService) SetFailover(enabled bool) error {
 	if err := client.Run(context.TODO(), req, resp); err != nil {
 		log.Error(err, "failoverError")
 		return errors.New("failed to enable cluster failover")
+	}
+
+	return nil
+}
+
+// ChangeFailover change cluster failover config
+func (s *BuiltInTopologyService) ChangeFailover(changeFailoverParams *ChangeFailoverParams) error {
+	if changeFailoverParams.Mode == "" {
+		log.Info("failover.mode is empty, skip change failover")
+	} else {
+		client := graphql.NewClient(s.serviceHost, graphql.WithHTTPClient(&http.Client{Timeout: time.Second * 5}))
+		req := graphql.NewRequest(changeFailover)
+
+		req.Var("failover_timeout", changeFailoverParams.FailoverTimeout)
+
+		req.Var("fencing_enabled", changeFailoverParams.FencingEnabled)
+		req.Var("fencing_timeout", changeFailoverParams.FencingTimeout)
+		req.Var("fencing_pause", changeFailoverParams.FencingPause)
+
+		req.Var("mode", changeFailoverParams.Mode)
+		req.Var("state_provider", changeFailoverParams.StateProvider)
+
+		req.Var("etcd2_params", changeFailoverParams.Etcd2Params)
+		req.Var("tarantool_params", changeFailoverParams.TarantoolParams)
+
+		resp := &FailoverData{}
+		if err := client.Run(context.TODO(), req, resp); err != nil {
+			return err
+		}
 	}
 
 	return nil
