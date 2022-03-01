@@ -33,7 +33,6 @@ import (
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -267,12 +266,6 @@ func CreateStatefulSetFromTemplate(ctx context.Context, replicasetNumber int, na
 
 	for k, v := range role.GetLabels() {
 		sts.Spec.Template.Labels[k] = v
-	}
-
-	privileged := false
-
-	sts.Spec.Template.Spec.Containers[0].SecurityContext = &corev1.SecurityContext{
-		Privileged: &privileged,
 	}
 
 	sts.Spec.ServiceName = role.GetAnnotations()["tarantool.io/cluster-id"]
