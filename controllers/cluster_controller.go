@@ -474,6 +474,47 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
+	for _, sts := range stsList.Items {
+		stsAnnotations := sts.GetAnnotations()
+		if stsAnnotations["tarantool.io/cartridgeConfigEnabled"] == "0" {
+			var objConfigs map[string]interface{}
+			if err = yaml.Unmarshal([]byte(stsAnnotations["tarantool.io/cartridgeConfig"]), &objConfigs); err != nil {
+				reqLogger.Error(err, "failed to unmarshal cluster cartridge config")
+				return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, nil
+			}
+			sections := make([]topology.Section, 0, len(objConfigs))
+			for name, objContent := range objConfigs {
+				if objContent == nil {
+					sections = append(sections, topology.Section{
+						Filename: name,
+					})
+				} else if rawContent, err := yaml.Marshal(objContent); err != nil {
+					reqLogger.Error(err, "failed to unmarshal cluster config", "role", name)
+					return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, nil
+				} else {
+					content := string(rawContent)
+					sections = append(sections, topology.Section{
+						Filename: name,
+						Content:  &content,
+					})
+				}
+			}
+
+			if err := topologyClient.Config(sections); err != nil {
+				reqLogger.Error(err, "failed to set cluster cartridge config")
+				return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, err
+			}
+
+			reqLogger.Info("enabled cartridge config")
+			stsAnnotations["tarantool.io/cartridgeConfigEnabled"] = "1"
+			sts.SetAnnotations(stsAnnotations)
+			if err := r.Update(context.TODO(), &sts); err != nil {
+				reqLogger.Error(err, "failed to set cartridgeConfig enabled annotation")
+				return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, err
+			}
+		}
+	}
+
 	return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, nil
 }
 

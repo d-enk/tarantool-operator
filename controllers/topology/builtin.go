@@ -134,6 +134,11 @@ type Statistics struct {
 	BucketsCount   int    `json:"bucketsCount"`
 }
 
+type Section struct {
+	Filename string  `json:"filename"`
+	Content  *string `json:"content"`
+}
+
 var log = logf.Log.WithName("topology")
 
 var (
@@ -141,6 +146,19 @@ var (
 	errAlreadyJoined       = errors.New("already joined")
 	errAlreadyBootstrapped = errors.New("already bootstrapped")
 )
+
+var config = `mutation
+	config(
+		$sections: [ConfigSectionInput!]
+	) {
+	cluster {
+		config(
+			sections: $sections,
+		) {
+			filename
+	  	}
+	}
+}`
 
 var changeFailover = `mutation
 	changeFailover(
@@ -220,6 +238,20 @@ var getServerStatQuery = `query serverList {
 type ObjectWithMeta interface {
 	GetLabels() map[string]string
 	GetAnnotations() map[string]string
+}
+
+// Config set cluster config
+func (s *BuiltInTopologyService) Config(sections []Section) error {
+	client := graphql.NewClient(s.serviceHost, graphql.WithHTTPClient(&http.Client{Timeout: time.Second * 30}))
+	req := graphql.NewRequest(config)
+
+	req.Var("sections", sections)
+
+	if err := client.Run(context.TODO(), req, nil); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // GetRoles comment

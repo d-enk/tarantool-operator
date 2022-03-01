@@ -205,6 +205,13 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			}
 		}
 
+		if cartridgeConfig, ok := role.GetAnnotations()["tarantool.io/cartridgeConfig"]; ok {
+			if sts.ObjectMeta.Annotations["tarantool.io/cartridgeConfig"] != cartridgeConfig {
+				sts.ObjectMeta.Annotations["tarantool.io/cartridgeConfig"] = cartridgeConfig
+				sts.ObjectMeta.Annotations["tarantool.io/cartridgeConfigEnabled"] = "0"
+			}
+		}
+
 		sts.Spec.Template.Spec.InitContainers = template.Spec.Template.Spec.InitContainers
 		if err := r.Update(context.TODO(), &sts); err != nil {
 			return reconcile.Result{}, err
