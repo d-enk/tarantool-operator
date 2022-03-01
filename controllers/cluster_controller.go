@@ -324,6 +324,11 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	for _, sts := range stsList.Items {
 		stsAnnotations := sts.GetAnnotations()
+		replicasetWeightWasSet, ok := stsAnnotations["tarantool.io/replicasetWeightWasSet"]
+		if !ok {
+			continue
+		}
+
 		weight := stsAnnotations["tarantool.io/replicaset-weight"]
 
 		if weight == "0" {
@@ -353,6 +358,10 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			}
 		}
 
+		if replicasetWeightWasSet == "1" {
+			continue
+		}
+
 		for i := 0; i < int(*sts.Spec.Replicas); i++ {
 			pod := &corev1.Pod{}
 			name := types.NamespacedName{
@@ -375,6 +384,13 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 
 		if err := topologyClient.SetWeight(sts.GetLabels()["tarantool.io/replicaset-uuid"], weight); err != nil {
+			return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, err
+		}
+
+		stsAnnotations["tarantool.io/replicasetWeightWasSet"] = "1"
+		sts.SetAnnotations(stsAnnotations)
+		if err := r.Update(context.TODO(), &sts); err != nil {
+			reqLogger.Error(err, "failed to set replicasetWeightWasSet annotation")
 			return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, err
 		}
 	}

@@ -31,7 +31,10 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
+	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -178,6 +181,22 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			}
 		}
 
+		if replicasetWeights, ok := role.GetAnnotations()["tarantool.io/replicasetWeights"]; ok {
+
+			splittedName := strings.Split(sts.Name, "-")
+			replicasetNumber, err := strconv.Atoi(splittedName[len(splittedName)-1])
+			if err != nil {
+				reqLogger.Error(err, "can't parse replicaset number")
+				return ctrl.Result{}, err
+			}
+
+			weight := weight(replicasetNumber, replicasetWeights)
+
+			if sts.ObjectMeta.Annotations["tarantool.io/replicaset-weight"] != weight {
+				sts.ObjectMeta.Annotations["tarantool.io/replicaset-weight"] = weight
+				sts.ObjectMeta.Annotations["tarantool.io/replicasetWeightWasSet"] = "0"
+			}
+		}
 		sts.Spec.Template.Spec.Containers[0].Env = template.Spec.Template.Spec.Containers[0].Env
 		reqLogger.Info("Env variables", "vars", sts.Spec.Template.Spec.Containers[0].Env)
 		if err := r.Update(context.TODO(), &sts); err != nil {
@@ -288,10 +307,26 @@ func CreateStatefulSetFromTemplate(ctx context.Context, replicasetNumber int, na
 	}
 
 	sts.ObjectMeta.Annotations["tarantool.io/isBootstrapped"] = "0"
-	sts.ObjectMeta.Annotations["tarantool.io/replicaset-weight"] = "100"
+
+	if replicasetWeights, ok := role.GetAnnotations()["tarantool.io/replicasetWeights"]; ok {
+		sts.ObjectMeta.Annotations["tarantool.io/replicaset-weight"] = weight(replicasetNumber, replicasetWeights)
+		sts.ObjectMeta.Annotations["tarantool.io/replicasetWeightWasSet"] = "0"
+	}
 
 	sts.Spec.Template.Labels["tarantool.io/replicaset-uuid"] = replicasetUUID.String()
 	sts.Spec.Template.Labels["tarantool.io/vshardGroupName"] = role.GetLabels()["tarantool.io/role"]
 
 	return sts
+}
+
+func weight(replicasetNumber int, replicasetWeights string) string {
+	weight := "100"
+	var weightsArray []string
+	if yaml.Unmarshal([]byte(replicasetWeights), &weightsArray) == nil {
+		if len(weightsArray) > replicasetNumber {
+			weight = weightsArray[replicasetNumber]
+		}
+	}
+
+	return weight
 }
