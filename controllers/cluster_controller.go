@@ -126,7 +126,7 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	cluster := &tarantooliov1alpha1.Cluster{}
 	if err := r.Get(context.TODO(), req.NamespacedName, cluster); err != nil {
 		if errors.IsNotFound(err) {
-			return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, nil
+			return ctrl.Result{}, nil
 		}
 
 		return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, err
