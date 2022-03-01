@@ -185,6 +185,7 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 						Protocol: "TCP",
 					},
 				},
+				PublishNotReadyAddresses: true,
 			}
 
 			if err := controllerutil.SetControllerReference(cluster, svc, r.Scheme); err != nil {
