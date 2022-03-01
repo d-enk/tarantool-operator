@@ -262,7 +262,16 @@ func CreateStatefulSetFromTemplate(ctx context.Context, replicasetNumber int, na
 	sts.Namespace = role.GetNamespace()
 	sts.ObjectMeta.Labels = role.GetLabels()
 
-	sts.Spec.UpdateStrategy = appsv1.StatefulSetUpdateStrategy{Type: "OnDelete"}
+	if sts.Spec.Template.Spec.Affinity != nil {
+		if sts.Spec.Template.Spec.Affinity.PodAntiAffinity != nil {
+			for i := range sts.Spec.Template.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution {
+				if sts.Spec.Template.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution[i].LabelSelector.MatchLabels != nil {
+					sts.Spec.Template.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution[i].
+						LabelSelector.MatchLabels["tarantool.io/replicasetNumber"] = fmt.Sprint(replicasetNumber)
+				}
+			}
+		}
+	}
 
 	for k, v := range role.GetLabels() {
 		sts.Spec.Template.Labels[k] = v
@@ -272,6 +281,7 @@ func CreateStatefulSetFromTemplate(ctx context.Context, replicasetNumber int, na
 	replicasetUUID := uuid.NewSHA1(space, []byte(sts.GetName()))
 	sts.ObjectMeta.Labels["tarantool.io/replicaset-uuid"] = replicasetUUID.String()
 	sts.ObjectMeta.Labels["tarantool.io/vshardGroupName"] = role.GetLabels()["tarantool.io/role"]
+	sts.ObjectMeta.Labels["tarantool.io/replicasetNumber"] = fmt.Sprint(replicasetNumber)
 
 	if sts.ObjectMeta.Annotations == nil {
 		sts.ObjectMeta.Annotations = make(map[string]string)
