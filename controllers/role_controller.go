@@ -205,6 +205,11 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			}
 		}
 
+		sts.Spec.Template.Spec.InitContainers = template.Spec.Template.Spec.InitContainers
+		if err := r.Update(context.TODO(), &sts); err != nil {
+			return reconcile.Result{}, err
+		}
+
 		sts.Spec.Template.Spec.Containers[0].Env = template.Spec.Template.Spec.Containers[0].Env
 		reqLogger.Info("Env variables", "vars", sts.Spec.Template.Spec.Containers[0].Env)
 		if err := r.Update(context.TODO(), &sts); err != nil {
